@@ -106,7 +106,7 @@ export const streamChatResponse = async (chat: Chat, prompt: string) => {
  * @param {string} resolution - The resolution (used by Veo3).
  * @param {string} negativePrompt - A negative prompt.
  * @param {{ imageBytes: string; mimeType: string }} [image] - Optional image data.
- * @returns {Promise<{ videoUrl: string; thumbnailUrl: string | null; videoBlobPromise: Promise<File>; }>} The generated video as a streamable URL and a promise for the file blob.
+ * @returns {Promise<{ videoFile: File; thumbnailUrl: string | null; }>} The generated video as a File object.
  */
 export const generateVideo = async (
     prompt: string,
@@ -116,7 +116,7 @@ export const generateVideo = async (
     negativePrompt: string,
     image: { imageBytes: string, mimeType: string } | undefined,
     onStatusUpdate?: (status: string) => void
-): Promise<{ videoUrl: string; thumbnailUrl: string | null; videoBlobPromise: Promise<File>; }> => {
+): Promise<{ videoFile: File; thumbnailUrl: string | null; }> => {
     try {
         let processedImage = image;
 
@@ -218,17 +218,17 @@ export const generateVideo = async (
         }
         
         const PROXY_URL = getVeoProxyUrl();
-        addLogEntry({ model, prompt, output: "Video ready for streaming.", tokenCount: 0, status: "Success" });
+        addLogEntry({ model, prompt, output: "Video ready. Downloading from proxy...", tokenCount: 0, status: "Success" });
         const proxyDownloadUrl = `${PROXY_URL}/api/veo/download-video?url=${encodeURIComponent(finalUrl)}`;
 
-        const videoBlobPromise = fetch(proxyDownloadUrl)
-            .then(res => {
-                if (!res.ok) throw new Error(`Background download failed: ${res.status}`);
-                return res.blob();
-            })
-            .then(blob => new File([blob], `monoklix-veo3-${Date.now()}.mp4`, { type: 'video/mp4' }));
+        const response = await fetch(proxyDownloadUrl);
+        if (!response.ok) {
+            throw new Error(`Background download failed with status: ${response.status}`);
+        }
+        const blob = await response.blob();
+        const videoFile = new File([blob], `monoklix-veo3-${Date.now()}.mp4`, { type: 'video/mp4' });
 
-        return { videoUrl: proxyDownloadUrl, thumbnailUrl, videoBlobPromise };
+        return { videoFile, thumbnailUrl };
 
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);

@@ -255,11 +255,9 @@ const VideoGenerationView: React.FC<VideoGenerationViewProps> = ({ preset, clear
       if (isMalay) {
           promptLines.push('Bahasa lisan dan suara latar MESTILAH 100% dalam Bahasa Melayu Malaysia. Ini adalah arahan PALING PENTING.');
           promptLines.push('❌ Dilarang menggunakan bahasa lain atau loghat luar.');
-          promptLines.push('🗣️ Semua sebutan dan gaya mesti seperti penutur asli Malaysia.');
       } else {
           promptLines.push(`Spoken language and voiceover MUST be 100% in ${targetLanguage}. This is the MOST IMPORTANT instruction.`);
           promptLines.push('❌ Do not use other languages or foreign accents.');
-          promptLines.push(`🗣️ All pronunciation and style must be like a native ${targetLanguage} speaker.`);
       }
       promptLines.push('\n---');
   
@@ -307,21 +305,21 @@ const VideoGenerationView: React.FC<VideoGenerationViewProps> = ({ preset, clear
       try {
           const image = referenceImage ? { imageBytes: referenceImage.base64, mimeType: referenceImage.mimeType } : undefined;
           
-          const { videoUrl: streamUrl, thumbnailUrl: newThumbnailUrl, videoBlobPromise } = await generateVideo(fullPrompt, model, aspectRatio, resolution, dynamicNegativePrompt, image, setStatusMessage);
+          const { videoFile, thumbnailUrl: newThumbnailUrl } = await generateVideo(fullPrompt, model, aspectRatio, resolution, dynamicNegativePrompt, image, setStatusMessage);
 
-          if (streamUrl) {
-              console.log('✅ Video stream URL received:', streamUrl);
-              setVideoUrl(streamUrl);
-              setVideoFilename(`monoklix-video-${Date.now()}.mp4`);
+          if (videoFile) {
+              const objectUrl = URL.createObjectURL(videoFile);
+              console.log('✅ Video file received and object URL created:', objectUrl);
+              setVideoUrl(objectUrl);
+              setVideoFilename(videoFile.name);
               setThumbnailUrl(newThumbnailUrl);
               
-              videoBlobPromise.then(async (videoFile) => {
-                  await addHistoryItem({
-                      type: 'Video',
-                      prompt: `Video Generation: ${prompt.trim().substring(0, 100)}...`,
-                      result: videoFile,
-                  });
-                  // FIX: Pass the full currentUser object instead of just the ID, as required by the function signature.
+              // Save to history in the background
+              addHistoryItem({
+                  type: 'Video',
+                  prompt: `Video Generation: ${prompt.trim().substring(0, 100)}...`,
+                  result: videoFile,
+              }).then(async () => {
                   const updateResult = await incrementVideoUsage(currentUser);
                   if (updateResult.success && updateResult.user) {
                       onUserUpdate(updateResult.user);
@@ -344,19 +342,12 @@ const VideoGenerationView: React.FC<VideoGenerationViewProps> = ({ preset, clear
     if (!videoUrl || !videoFilename) return;
     setIsDownloading(true);
     try {
-        const response = await fetch(videoUrl);
-        if (!response.ok) {
-            throw new Error(`Download failed: ${response.statusText}`);
-        }
-        const blob = await response.blob();
-        const objectUrl = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = objectUrl;
+        link.href = videoUrl;
         link.download = videoFilename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        URL.revokeObjectURL(objectUrl);
     } catch (error) {
         console.error("Download error:", error);
         setError(error instanceof Error ? error.message : "Failed to download video.");

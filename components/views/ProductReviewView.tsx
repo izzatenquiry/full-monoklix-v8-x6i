@@ -1,8 +1,10 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import ImageUpload from '../common/ImageUpload';
+// FIX: Removed invalid import for 'composeImage'.
 import { type MultimodalContent, generateMultimodalContent, generateVideo } from '../../services/geminiService';
 import { addHistoryItem } from '../../services/historyService';
 import Spinner from '../common/Spinner';
+// FIX: Added missing UserIcon and TikTokIcon to fix 'Cannot find name' errors.
 import { StarIcon, DownloadIcon, ImageIcon, VideoIcon, WandIcon, AlertTriangleIcon, RefreshCwIcon, XIcon, UserIcon, TikTokIcon } from '../Icons';
 import { getProductReviewImagePrompt, getProductReviewStoryboardPrompt, getImageEditingPrompt } from '../../services/promptManager';
 import { type User } from '../../types';
@@ -584,7 +586,7 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
         
         const image = { imageBytes: imageBase64, mimeType: 'image/png' };
         
-        const { thumbnailUrl, videoUrl, videoBlobPromise } = await generateVideo(
+        const { videoFile, thumbnailUrl } = await generateVideo(
             fullPrompt, 
             videoModel, 
             videoAspectRatio, 
@@ -593,11 +595,15 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
             image
         );
 
-        if (videoUrl) {
-            // Let the UI stream the video immediately
+        if (videoFile) {
+            const objectUrl = URL.createObjectURL(videoFile);
+
             setGeneratedVideos(prev => {
                 const newVideos = [...prev];
-                newVideos[index] = videoUrl;
+                if (newVideos[index] && newVideos[index]?.startsWith('blob:')) {
+                    URL.revokeObjectURL(newVideos[index]!);
+                }
+                newVideos[index] = objectUrl;
                 return newVideos;
             });
              setGeneratedThumbnails(prev => {
@@ -606,7 +612,6 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
                 return newThumbs;
             });
 
-            // Set success immediately for UI responsiveness
             setVideoGenerationStatus(prev => {
                 const newStatus = [...prev];
                 newStatus[index] = 'success';
@@ -614,15 +619,11 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
             });
             setVideoFilenames(prev => {
                 const newNames = [...prev];
-                newNames[index] = `monoklix-scene-${index+1}.mp4`;
+                newNames[index] = videoFile.name;
                 return newNames;
             });
 
-            // Handle history saving and usage increment in the background
-            videoBlobPromise.then(async (videoFile) => {
-                const historyPrompt = `Scene ${index + 1} Video`;
-                await addHistoryItem({ type: 'Video', prompt: historyPrompt, result: videoFile });
-                // FIX: Pass the full currentUser object instead of just the ID, as required by the function signature.
+            addHistoryItem({ type: 'Video', prompt: `Scene ${index + 1} Video`, result: videoFile }).then(async () => {
                 const updateResult = await incrementVideoUsage(currentUser);
                 if (updateResult.success && updateResult.user) {
                     onUserUpdate(updateResult.user);
@@ -679,19 +680,12 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
     if (!url) return;
     setDownloadingVideoIndex(index);
     try {
-        const response = await fetch(url);
-        if (!response.ok) {
-            throw new Error(`Download failed: ${response.statusText}`);
-        }
-        const blob = await response.blob();
-        const objectUrl = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = objectUrl;
+        link.href = url;
         link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        URL.revokeObjectURL(objectUrl);
     } catch (error) {
         console.error("Download error:", error);
         alert("Failed to download video.");
@@ -730,7 +724,7 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
 
     setIsGeneratingVideos(false);
     setVideoGenerationStatus(Array(4).fill('idle'));
-    generatedVideos.forEach(url => { if (url) URL.revokeObjectURL(url) });
+    generatedVideosRef.current.forEach(url => { if (url && url.startsWith('blob:')) URL.revokeObjectURL(url) });
     setGeneratedVideos(Array(4).fill(null));
     setGeneratedThumbnails(Array(4).fill(null));
     setVideoFilenames(Array(4).fill(null));
@@ -738,7 +732,7 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
     isVideoCancelledRef.current = false;
     
     sessionStorage.removeItem(SESSION_KEY);
-  }, [generatedVideos]);
+  }, []);
 
   const isTrialUser = currentUser.status === 'trial';
   const usageCount = currentUser.storyboardUsageCount || 0;

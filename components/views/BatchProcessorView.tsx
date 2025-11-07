@@ -141,14 +141,14 @@ const BatchProcessorView: React.FC<BatchProcessorViewProps> = ({ preset, clearPr
 
         try {
             const imagePayload = item.image ? { imageBytes: item.image.base64, mimeType: item.image.mimeType } : undefined;
-            const { videoUrl, videoBlobPromise } = await generateVideo(prompt, model, aspectRatio, resolution, "", imagePayload);
+            // FIX: The generateVideo function returns a `videoFile` object, not `videoUrl` and `videoBlobPromise`.
+            // This has been updated to use the correct return signature and handle the resulting file.
+            const { videoFile } = await generateVideo(prompt, model, aspectRatio, resolution, "", imagePayload);
 
-            if (!videoUrl) {
+            if (!videoFile) {
                 throw new Error("Video generation did not produce a result.");
             }
             
-            // Wait for the video to be downloaded and then save it to history
-            const videoFile = await videoBlobPromise;
             await addHistoryItem({ type: 'Video', prompt: `Batch: ${prompt}`, result: videoFile });
             
             addLog(`Successfully generated video for: ${prompt}`, 'success');
