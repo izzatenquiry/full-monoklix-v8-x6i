@@ -1,33 +1,40 @@
-# ---------- Build Stage ----------
-FROM node:18-bullseye-slim AS build
+# =======================================================
+# 🔨 Build Stage
+# =======================================================
+FROM node:20-bullseye-slim AS build
 
+# Set working directory
 WORKDIR /app
 
-# Copy package files
+# Copy package files terlebih dahulu (supaya Docker cache berfungsi)
 COPY package*.json ./
 
-# Install dependencies
-RUN npm install
+# Pastikan semua dependencies termasuk dev dipasang
+RUN npm install --include=dev
 
 # Copy semua source code
 COPY . .
 
-# Build React app
+# Build React (Vite)
 RUN npm run build
 
-# ---------- Production Stage ----------
-FROM node:18-bullseye-slim
 
+# =======================================================
+# 🚀 Production Stage
+# =======================================================
+FROM node:20-bullseye-slim
+
+# Buat directory kerja baru
 WORKDIR /app
 
-# Install serve untuk host SPA
+# Install `serve` untuk host SPA (single-page app)
 RUN npm install -g serve
 
-# Copy hasil build sahaja
+# Copy hasil build dari stage pertama
 COPY --from=build /app/dist ./dist
 
-# Expose port
+# Dedahkan port
 EXPOSE 8080
 
-# Start command
+# Jalankan aplikasi
 CMD ["serve", "-s", "dist", "-l", "8080"]
