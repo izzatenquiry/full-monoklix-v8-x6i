@@ -110,6 +110,7 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
   const [generatedVideos, setGeneratedVideos] = useState<(string | null)[]>(Array(4).fill(null));
   const [generatedThumbnails, setGeneratedThumbnails] = useState<(string | null)[]>(Array(4).fill(null));
   const [videoFilenames, setVideoFilenames] = useState<(string | null)[]>(Array(4).fill(null));
+  // FIX: Add missing videoGenerationErrors state to resolve 'Cannot find name' errors.
   const [videoGenerationErrors, setVideoGenerationErrors] = useState<(string | null)[]>(Array(4).fill(null));
   const [downloadingVideoIndex, setDownloadingVideoIndex] = useState<number | null>(null);
   const isVideoCancelledRef = useRef(false);
@@ -190,7 +191,9 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
   ]);
 
   const generatedVideosRef = useRef(generatedVideos);
-  generatedVideosRef.current = generatedVideos;
+  useEffect(() => {
+      generatedVideosRef.current = generatedVideos;
+  }, [generatedVideos]);
 
   useEffect(() => {
     return () => {
@@ -281,7 +284,6 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
       });
 
       // Increment usage count for the user
-      // FIX: Pass the full currentUser object instead of just the ID, as required by the function signature.
       const updateResult = await incrementStoryboardUsage(currentUser);
       if (updateResult.success === false) {
           setStoryboardError(updateResult.message || "An unknown error occurred while updating usage.");
@@ -369,7 +371,6 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
         
         await addHistoryItem({ type: 'Image', prompt: `Storyboard Scene ${index + 1}: ${parsedScenes[index].substring(0, 50)}...`, result: imageBase64 });
 
-        // FIX: Pass the full currentUser object instead of just the ID, as required by the function signature.
         const updateResult = await incrementImageUsage(currentUser);
         if (updateResult.success && updateResult.user) {
             onUserUpdate(updateResult.user);
@@ -432,7 +433,6 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
         
         await addHistoryItem({ type: 'Image', prompt: `Edited Storyboard Scene ${index + 1}: ${editPrompt}`, result: imageBase64 });
 
-        // FIX: Pass the full currentUser object instead of just the ID, as required by the function signature.
         const updateResult = await incrementImageUsage(currentUser);
         if (updateResult.success && updateResult.user) {
             onUserUpdate(updateResult.user);
@@ -569,7 +569,8 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
             promptLines.push(isMalay ? '🔊 AUDIO (DIALOGUE):' : '🔊 AUDIO (DIALOGUE):');
             promptLines.push(isMalay ? `Gunakan hanya dialog berikut dalam Bahasa Melayu Malaysia:` : `Use only the following dialogue in ${targetLanguage}:`);
             promptLines.push(`"${voiceover}"`);
-            promptLines.push(isMalay ? 'Nada suara: mesra, yakin dan bersemangat.' : 'Voice tone: friendly, confident, and enthusiastic.');
+            promptLines.push(isMalay ? 'ARAHAN PENTING: Sebutkan skrip ini dengan lengkap, perkataan demi perkataan. Jangan ubah atau ringkaskan ayat.' : 'CRITICAL INSTRUCTION: Speak this script completely, word for word. Do not change or shorten the sentences.');
+            promptLines.push(isMalay ? `Nada suara: mesra, yakin dan bersemangat.` : 'Voice tone: friendly, confident, and enthusiastic.');
             promptLines.push('\n---');
         }
 
@@ -680,12 +681,19 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
     if (!url) return;
     setDownloadingVideoIndex(index);
     try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Download failed: ${response.statusText}`);
+        }
+        const blob = await response.blob();
+        const objectUrl = URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = url;
+        link.href = objectUrl;
         link.download = filename;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+        URL.revokeObjectURL(objectUrl);
     } catch (error) {
         console.error("Download error:", error);
         alert("Failed to download video.");
@@ -724,6 +732,7 @@ const ProductReviewView: React.FC<ProductReviewViewProps> = ({ onReEdit, onCreat
 
     setIsGeneratingVideos(false);
     setVideoGenerationStatus(Array(4).fill('idle'));
+    // Use the ref to ensure we're revoking the latest URLs
     generatedVideosRef.current.forEach(url => { if (url && url.startsWith('blob:')) URL.revokeObjectURL(url) });
     setGeneratedVideos(Array(4).fill(null));
     setGeneratedThumbnails(Array(4).fill(null));

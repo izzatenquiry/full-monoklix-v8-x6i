@@ -549,9 +549,9 @@ const App: React.FC = () => {
                         break;
                     }
                 } else {
-                    console.warn(`[Auto-Assign] Token ...${tokenData.token.slice(-6)} failed health check. Marking as expired.`);
-                    // Fire-and-forget call to mark the token as expired
-                    updateTokenStatusToExpired(tokenData.token);
+                    console.warn(`[Auto-Assign] Token ...${tokenData.token.slice(-6)} failed health check. Skipping token.`);
+                    // The functionality to mark tokens as expired is currently disabled per user request.
+                    // updateTokenStatusToExpired(tokenData.token);
                 }
             }
 

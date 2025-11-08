@@ -516,10 +516,8 @@ export const getVeoAuthTokens = async (): Promise<{ token: string; createdAt: st
     const { data, error } = await supabase
         .from('token_new_active')
         .select('token, created_at')
-        .lt('total_user', 10) // Only fetch tokens with less than 10 users.
-        .or('status.is.null,status.neq.expired') // Fetch if status is NULL or not 'expired'
         .order('created_at', { ascending: false })
-        .limit(30);
+        .limit(20);
 
     if (error) {
         console.error('Error fetching VEO auth tokens:', getErrorMessage(error));
@@ -527,8 +525,7 @@ export const getVeoAuthTokens = async (): Promise<{ token: string; createdAt: st
     }
 
     if (data && data.length > 0) {
-        // Reverse the array so the oldest of the 30 latest tokens is first.
-        return data.reverse().map(item => ({ token: item.token, createdAt: item.created_at }));
+        return data.map(item => ({ token: item.token, createdAt: item.created_at }));
     }
     
     return null;
@@ -786,22 +783,13 @@ export const updateUserProxyServer = async (userId: string, serverUrl: string | 
 };
 
 /**
- * Marks a token as expired in the database. This is a fire-and-forget operation.
+ * Marks a token as expired in the database.
+ * NOTE: This functionality is currently DISABLED as per user request.
+ * The function will do nothing when called.
  * @param token The token string to mark as expired.
  */
 export const updateTokenStatusToExpired = async (token: string): Promise<void> => {
-    try {
-        const { error } = await supabase
-            .from('token_new_active')
-            .update({ status: 'expired' })
-            .eq('token', token);
-
-        if (error) {
-            console.error(`Failed to mark token ...${token.slice(-6)} as expired:`, getErrorMessage(error));
-        } else {
-            console.log(`Successfully marked token ...${token.slice(-6)} as expired.`);
-        }
-    } catch (error) {
-        console.error(`Exception while marking token as expired:`, getErrorMessage(error));
-    }
+    // This functionality is disabled per user request. The function body is empty.
+    console.log(`[DISABLED] Skipping marking token ...${token.slice(-6)} as expired.`);
+    return Promise.resolve();
 };

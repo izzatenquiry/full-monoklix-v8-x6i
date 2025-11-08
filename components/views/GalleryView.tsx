@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { getHistory, deleteHistoryItem } from '../../services/historyService';
 import { type HistoryItem, type AiLogItem } from '../../types';
 import { ImageIcon, VideoIcon, DownloadIcon, TrashIcon, PlayIcon, AudioIcon, WandIcon, ClipboardListIcon, ChevronDownIcon, ClipboardIcon, CheckCircleIcon, AlertTriangleIcon } from '../Icons';
@@ -196,8 +196,9 @@ const AiLogPanel: React.FC = () => {
 const GalleryView: React.FC<GalleryViewProps> = ({ onCreateVideo, onReEdit }) => {
     const [allItems, setAllItems] = useState<HistoryItem[]>([]);
     const [activeTab, setActiveTab] = useState<GalleryTabId>('images');
-    const [blobUrls, setBlobUrls] = useState<Map<string, string>>(new Map());
+    const [blobUrls, setBlobUrls] = useState(new Map<string, string>());
     const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+    const blobUrlsRef = useRef(new Map<string, string>());
 
     const refreshHistory = useCallback(async () => {
         const history = await getHistory();
@@ -208,39 +209,54 @@ const GalleryView: React.FC<GalleryViewProps> = ({ onCreateVideo, onReEdit }) =>
         refreshHistory();
     }, [refreshHistory]);
 
-    // Effect to create and revoke blob URLs for persistent display
+    // Robustly manage object URLs to prevent premature revocation
     useEffect(() => {
-        const newUrls = new Map<string, string>();
-        allItems.forEach(item => {
-            if (item.result instanceof Blob) {
-                const url = URL.createObjectURL(item.result);
-                newUrls.set(item.id, url);
-            }
-        });
-        setBlobUrls(newUrls);
+        const prevUrls = blobUrlsRef.current;
+        const nextUrls = new Map<string, string>();
 
-        // Cleanup function to revoke URLs when the component unmounts or items change
-        return () => {
-            newUrls.forEach(url => URL.revokeObjectURL(url));
-        };
+        for (const item of allItems) {
+            if (item.result instanceof Blob) {
+                // Check if a URL already exists. If so, reuse it to prevent flicker.
+                if (prevUrls.has(item.id)) {
+                    nextUrls.set(item.id, prevUrls.get(item.id)!);
+                } else {
+                    nextUrls.set(item.id, URL.createObjectURL(item.result));
+                }
+            }
+        }
+        
+        // Revoke URLs that are no longer in use
+        for (const [id, url] of prevUrls.entries()) {
+            if (!nextUrls.has(id)) {
+                URL.revokeObjectURL(url);
+            }
+        }
+
+        blobUrlsRef.current = nextUrls;
+        setBlobUrls(new Map(nextUrls));
     }, [allItems]);
+
+    // Cleanup all remaining URLs on unmount
+    useEffect(() => {
+        return () => {
+            for (const url of blobUrlsRef.current.values()) {
+                URL.revokeObjectURL(url);
+            }
+        };
+    }, []);
     
     const getDisplayUrl = (item: HistoryItem): string => {
         if (item.type === 'Image' || item.type === 'Canvas') {
             return `data:image/png;base64,${item.result as string}`;
         }
-        if (item.result instanceof Blob) {
-            return blobUrls.get(item.id) || '';
-        }
-        // Fallback for potentially invalid, old string-based blob URLs
-        return item.result as string;
+        return blobUrls.get(item.id) || '';
     };
     
     const downloadAsset = (item: HistoryItem) => {
         const link = document.createElement('a');
         let fileName: string;
         let href: string | null = null;
-        let shouldRevoke = false; // Flag to revoke object URLs created just for download
+        let urlToRevoke: string | null = null;
     
         switch (item.type) {
             case 'Image':
@@ -250,21 +266,16 @@ const GalleryView: React.FC<GalleryViewProps> = ({ onCreateVideo, onReEdit }) =>
                 break;
             case 'Video':
             case 'Audio':
-                const extension = item.type === 'Video' ? 'mp4' : 'mp3';
+                const extension = item.type === 'Video' ? 'mp4' : 'wav';
                 fileName = `monoklix-${item.type.toLowerCase()}-${item.id}.${extension}`;
                 href = blobUrls.get(item.id) || null;
-                // If the URL isn't in state (rare), create it temporarily
-                if (!href && item.result instanceof Blob) {
-                    href = URL.createObjectURL(item.result);
-                    shouldRevoke = true;
-                }
                 break;
             case 'Storyboard':
             case 'Copy':
                 fileName = `monoklix-${item.type.toLowerCase()}-${item.id}.txt`;
                 const blob = new Blob([item.result as string], { type: 'text/plain;charset=utf-8' });
                 href = URL.createObjectURL(blob);
-                shouldRevoke = true;
+                urlToRevoke = href;
                 break;
             default:
                 return;
@@ -277,8 +288,9 @@ const GalleryView: React.FC<GalleryViewProps> = ({ onCreateVideo, onReEdit }) =>
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        if (shouldRevoke && href.startsWith('blob:')) {
-            URL.revokeObjectURL(href);
+        
+        if (urlToRevoke) {
+            URL.revokeObjectURL(urlToRevoke);
         }
     };
 

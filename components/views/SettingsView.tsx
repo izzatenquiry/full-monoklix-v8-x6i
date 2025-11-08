@@ -329,11 +329,11 @@ const ApiIntegrationsPanel: React.FC<ApiIntegrationsPanelProps> = ({ currentUser
 
         const result = await assignPersonalTokenAndIncrementUsage(currentUser.id, token);
 
-        if (result.success) {
+        if (result.success === false) {
+            setTokenStatusMessage({ type: 'error', message: result.message || 'Failed to claim token. It might have been taken by another user.' });
+        } else {
             onUserUpdate(result.user);
             setTokenStatusMessage({ type: 'success', message: 'Token claimed successfully and set as your personal token!' });
-        } else {
-            setTokenStatusMessage({ type: 'error', message: result.message || 'Failed to claim token. It might have been taken by another user.' });
         }
         
         setClaimingToken(null);
@@ -346,8 +346,7 @@ const ApiIntegrationsPanel: React.FC<ApiIntegrationsPanelProps> = ({ currentUser
         setClaimError(null);
 
         const clearResult = await saveUserPersonalAuthToken(currentUser.id, null);
-        // FIX: Restructured the logic with if/else to ensure TypeScript correctly
-        // narrows the discriminated union type and allows access to the 'message' or 'user' property.
+        
         if (clearResult.success === false) {
             setClaimError(clearResult.message || 'Failed to clear previous token.');
             setClaimStatus('error');
@@ -359,7 +358,6 @@ const ApiIntegrationsPanel: React.FC<ApiIntegrationsPanelProps> = ({ currentUser
                 setClaimStatus('success');
                 setTimeout(() => {
                     setClaimStatus('idle');
-                    // setIsPopoverOpen(false); // Assuming setIsPopoverOpen is available in this scope, if not this might be an issue. Let's assume it is defined somewhere above.
                 }, 2000);
             } else {
                 setClaimError(assignResult.error || 'Failed to assign token.');
@@ -457,16 +455,14 @@ const ApiIntegrationsPanel: React.FC<ApiIntegrationsPanelProps> = ({ currentUser
         setPersonalTokenSaveStatus('saving');
         const result = await saveUserPersonalAuthToken(currentUser.id, personalAuthToken.trim() || null);
 
-        // FIX: Explicitly check for `result.success === true` to help TypeScript correctly
-        // narrow the discriminated union type and allow access to the `user` or `message` property.
-        if (result.success === true) {
-            onUserUpdate(result.user);
-            setPersonalTokenSaveStatus('saved');
-        } else {
+        if (result.success === false) {
             setPersonalTokenSaveStatus('error');
             if (result.message === 'DB_SCHEMA_MISSING_COLUMN_personal_auth_token' && currentUser.role === 'admin') {
                 alert("Database schema is outdated.\n\nPlease go to your Supabase dashboard and run the following SQL command to add the required column:\n\nALTER TABLE public.users ADD COLUMN personal_auth_token TEXT;");
             }
+        } else {
+            onUserUpdate(result.user);
+            setPersonalTokenSaveStatus('saved');
         }
         setTimeout(() => setPersonalTokenSaveStatus('idle'), 3000);
     };
@@ -600,8 +596,8 @@ const ApiIntegrationsPanel: React.FC<ApiIntegrationsPanelProps> = ({ currentUser
                                     const veoStatus = getStatusButtonStyles(veoResult);
                                     return (
                                         <div key={index} className={`p-3 rounded-md border bg-neutral-100 dark:bg-neutral-800/50 border-neutral-200 dark:border-neutral-700`}>
-                                            <div className="flex items-center gap-4 flex-wrap">
-                                                <div className="flex-1 text-sm min-w-[200px]">
+                                            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                                                <div className="flex-1 text-sm">
                                                     <p className={`font-semibold text-neutral-800 dark:text-neutral-200`}>
                                                         {`Shared Token #${index + 1}`}
                                                         <span className="font-mono text-xs ml-2">...{tokenData.token.slice(-6)}</span>
@@ -610,19 +606,19 @@ const ApiIntegrationsPanel: React.FC<ApiIntegrationsPanelProps> = ({ currentUser
                                                         Created: {new Date(tokenData.createdAt).toLocaleString(locale)}
                                                     </p>
                                                 </div>
-                                                <div className="flex items-center gap-2 flex-shrink-0">
-                                                    <div title={imagenResult?.message || 'Test status for Imagen'} className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-full min-w-[100px] ${imagenStatus.className}`}>
+                                                <div className="grid grid-cols-2 sm:flex sm:items-center sm:flex-shrink-0 gap-2">
+                                                    <div title={imagenResult?.message || 'Test status for Imagen'} className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-full ${imagenStatus.className}`}>
                                                         <span className="font-medium">IMAGEN</span>
                                                         <span className="font-bold">{imagenStatus.text}</span>
                                                     </div>
-                                                    <div title={veoResult?.message || 'Test status for Veo3'} className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-full min-w-[100px] ${veoStatus.className}`}>
+                                                    <div title={veoResult?.message || 'Test status for Veo3'} className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs rounded-full ${veoStatus.className}`}>
                                                         <span className="font-medium">VEO3</span>
                                                         <span className="font-bold">{veoStatus.text}</span>
                                                     </div>
-                                                     <button onClick={() => handleTestSharedToken(tokenData.token)} disabled={testingToken !== null} className="w-20 flex justify-center text-xs font-semibold py-1.5 px-3 rounded-full bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 disabled:opacity-50">
+                                                     <button onClick={() => handleTestSharedToken(tokenData.token)} disabled={testingToken !== null} className="sm:w-20 flex justify-center text-xs font-semibold py-1.5 px-3 rounded-full bg-neutral-200 dark:bg-neutral-700 hover:bg-neutral-300 dark:hover:bg-neutral-600 disabled:opacity-50">
                                                         {testingToken === tokenData.token ? <Spinner /> : 'Test'}
                                                     </button>
-                                                    <button onClick={() => handleClaimSharedToken(tokenData.token)} disabled={claimingToken !== null || currentUser.personalAuthToken === tokenData.token} className="w-20 flex justify-center text-xs font-semibold py-1.5 px-3 rounded-full bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:bg-primary-800">
+                                                    <button onClick={() => handleClaimSharedToken(tokenData.token)} disabled={claimingToken !== null || currentUser.personalAuthToken === tokenData.token} className="sm:w-20 flex justify-center text-xs font-semibold py-1.5 px-3 rounded-full bg-primary-600 text-white hover:bg-primary-700 disabled:opacity-50 disabled:bg-primary-800">
                                                         {claimingToken === tokenData.token ? <Spinner /> : currentUser.personalAuthToken === tokenData.token ? 'Claimed' : 'Claim'}
                                                     </button>
                                                 </div>

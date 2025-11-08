@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import VideoGenerationView from './VideoGenerationView';
-// FIX: Changed to a named import to resolve the "no default export" error.
 import { VideoCombinerView } from './VideoCombinerView';
 import VoiceStudioView from './VoiceStudioView';
 import ProductReviewView from './ProductReviewView';
